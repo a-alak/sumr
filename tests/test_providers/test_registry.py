@@ -19,7 +19,7 @@ class TestGetTranscriber:
     @patch("sumr.providers.openai.OpenAI")
     def test_model_passthrough(self, mock_openai_cls):
         t = get_transcriber("openai", api_key="sk-test", model="whisper-1")
-        assert t._model == "whisper-1"
+        assert t._inner._model == "whisper-1"
 
 
 class TestGetSummarizer:
