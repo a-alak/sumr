@@ -2,9 +2,15 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from sumr.providers.base import SummarizationResult, TranscriberLimits, TranscriptionResult
+from sumr.providers.base import (
+    SummarizationResult,
+    TranscriberLimits,
+    TranscriptionResult,
+)
 
 DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
+
+_DIARIZATION_MODELS = {"gpt-4o-transcribe-diarize"}
 
 _DEFAULT_LIMITS = TranscriberLimits(max_upload_bytes=25 * 1024 * 1024)
 
@@ -13,7 +19,10 @@ _DEFAULT_LIMITS = TranscriberLimits(max_upload_bytes=25 * 1024 * 1024)
 _MODEL_LIMITS: dict[str, TranscriberLimits] = {
     "gpt-4o-transcribe": TranscriberLimits(
         max_upload_bytes=25 * 1024 * 1024,
-        max_chunk_duration_secs=480,
+    ),
+    "gpt-4o-transcribe-diarize": TranscriberLimits(
+        max_upload_bytes=25 * 1024 * 1024,
+        max_chunk_duration_secs=1500,
     ),
     "gpt-4o-mini-transcribe": TranscriberLimits(
         max_upload_bytes=25 * 1024 * 1024,
@@ -45,18 +54,33 @@ class OpenAITranscriber:
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
+        effective_format = (
+            "diarized_json"
+            if self._model in _DIARIZATION_MODELS and response_format == "text"
+            else response_format
+        )
+
         kwargs: dict = {
             "model": self._model,
             "file": audio_path,
-            "response_format": response_format,
+            "response_format": effective_format,
         }
         if language is not None:
             kwargs["language"] = language
         if prompt is not None:
             kwargs["prompt"] = prompt
+        if self._model in _DIARIZATION_MODELS:
+            kwargs["chunking_strategy"] = "auto"
 
         response = self._client.audio.transcriptions.create(**kwargs)
-        text = response if isinstance(response, str) else response.text
+        if isinstance(response, str):
+            text = response
+        elif hasattr(response, "segments") and response.segments:
+            text = "\n".join(
+                f"[Speaker {s.speaker}]: {s.text}" for s in response.segments
+            )
+        else:
+            text = response.text
         return TranscriptionResult(text=text, model=self._model)
 
 
