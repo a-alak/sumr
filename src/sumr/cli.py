@@ -8,6 +8,7 @@ from rich.console import Console
 from typer.core import TyperGroup
 
 from sumr.config import Settings
+from sumr.prompts import PromptNotFoundError, load_prompt
 from sumr.providers import get_summarizer, get_transcriber
 from sumr.utils import (
     derive_output_path,
@@ -66,6 +67,31 @@ def _status(message: str, quiet: bool):
     return err_console.status(message, spinner="dots")
 
 
+def _resolve_prompt(
+    prompt: str | None, system_prompt: str | None, settings: Settings
+) -> str:
+    """Resolve which system prompt to use for summarization.
+
+    Priority: --system-prompt (inline) > --prompt (name or file) > default named prompt.
+    """
+    if system_prompt is not None:
+        return system_prompt
+    extra_dirs = [settings.sumr_prompts_dir] if settings.sumr_prompts_dir else None
+    if prompt is not None:
+        p = Path(prompt)
+        if p.is_file():
+            return p.read_text(encoding="utf-8")
+        try:
+            return load_prompt(prompt, extra_dirs=extra_dirs)
+        except PromptNotFoundError as e:
+            _error(str(e))
+    try:
+        return load_prompt(settings.default_prompt_name, extra_dirs=extra_dirs)
+    except PromptNotFoundError as e:
+        _error(str(e))
+    return ""  # unreachable
+
+
 @app.command()
 def transcribe(
     audio: Annotated[Path, typer.Argument(help="Path to audio file")],
@@ -76,7 +102,7 @@ def transcribe(
         str | None, typer.Option("--model", "-m", help="Transcription model")
     ] = None,
     provider: Annotated[
-        str | None, typer.Option("--provider", "-p", help="Provider name")
+        str | None, typer.Option("--provider", "-P", help="Provider name")
     ] = None,
     language: Annotated[
         str | None, typer.Option("--language", "-l", help="Audio language")
@@ -146,10 +172,14 @@ def summarize(
         str | None, typer.Option("--model", "-m", help="Summarization model")
     ] = None,
     provider: Annotated[
-        str | None, typer.Option("--provider", "-p", help="Provider name")
+        str | None, typer.Option("--provider", "-P", help="Provider name")
     ] = None,
     prompt: Annotated[
-        str | None, typer.Option("--prompt", help="Custom summary prompt")
+        str | None, typer.Option("--prompt", "-p", help="Named prompt or file path")
+    ] = None,
+    system_prompt_text: Annotated[
+        str | None,
+        typer.Option("--system-prompt", help="Inline system prompt override"),
     ] = None,
     verbose: Annotated[
         bool, typer.Option("--verbose", "-v", help="Show detailed output")
@@ -163,7 +193,7 @@ def summarize(
     api_key = _require_api_key(settings)
     prov = provider or settings.default_provider
     mdl = model or settings.default_summarization_model
-    system_prompt = prompt or settings.default_summary_prompt
+    system_prompt = _resolve_prompt(prompt, system_prompt_text, settings)
 
     try:
         text = read_input_text(input_file)
@@ -215,13 +245,17 @@ def run(
         str | None, typer.Option("--model", "-m", help="Model for both steps")
     ] = None,
     provider: Annotated[
-        str | None, typer.Option("--provider", "-p", help="Provider name")
+        str | None, typer.Option("--provider", "-P", help="Provider name")
     ] = None,
     language: Annotated[
         str | None, typer.Option("--language", "-l", help="Audio language")
     ] = None,
     prompt: Annotated[
-        str | None, typer.Option("--prompt", help="Custom summary prompt")
+        str | None, typer.Option("--prompt", "-p", help="Named prompt or file path")
+    ] = None,
+    system_prompt_text: Annotated[
+        str | None,
+        typer.Option("--system-prompt", help="Inline system prompt override"),
     ] = None,
     response_format: Annotated[
         str, typer.Option("--format", "-f", help="Transcription format")
@@ -239,7 +273,7 @@ def run(
     prov = provider or settings.default_provider
     t_model = model or settings.default_transcription_model
     s_model = model or settings.default_summarization_model
-    system_prompt = prompt or settings.default_summary_prompt
+    system_prompt = _resolve_prompt(prompt, system_prompt_text, settings)
 
     try:
         validate_audio_file(audio)

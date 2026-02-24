@@ -9,7 +9,7 @@ class TestSettings:
         assert settings.default_provider == "openai"
         assert settings.default_transcription_model == "gpt-4o-mini-transcribe"
         assert settings.default_summarization_model == "gpt-4o-mini"
-        assert "summar" in settings.default_summary_prompt.lower()
+        assert settings.default_prompt_name == "summarize"
 
     def test_env_var_overrides(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
@@ -26,3 +26,8 @@ class TestSettings:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         settings = Settings()
         assert settings.openai_api_key == ""
+
+    def test_sumr_prompts_dir_from_env(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("SUMR_PROMPTS_DIR", str(tmp_path))
+        settings = Settings()
+        assert settings.sumr_prompts_dir == tmp_path

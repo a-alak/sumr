@@ -135,9 +135,71 @@ class TestSummarizeCommand:
 
         runner.invoke(
             app,
-            ["summarize", str(f), "--prompt", "Be very brief", "-o", str(out), "-q"],
+            [
+                "summarize",
+                str(f),
+                "--system-prompt",
+                "Be very brief",
+                "-o",
+                str(out),
+                "-q",
+            ],
         )
         s.summarize.assert_called_once_with("text", system_prompt="Be very brief")
+
+    @patch("sumr.cli.get_summarizer")
+    def test_prompt_named_loads_bundled(self, mock_get, monkeypatch, tmp_path):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        s = _mock_summarizer()
+        mock_get.return_value = s
+
+        f = tmp_path / "transcript.txt"
+        f.write_text("text")
+        out = tmp_path / "out.txt"
+
+        result = runner.invoke(
+            app,
+            ["summarize", str(f), "--prompt", "summarize", "-o", str(out), "-q"],
+        )
+        assert result.exit_code == 0
+        call_kwargs = s.summarize.call_args
+        assert "You are an expert" in call_kwargs.kwargs["system_prompt"]
+
+    @patch("sumr.cli.get_summarizer")
+    def test_prompt_file_path(self, mock_get, monkeypatch, tmp_path):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        s = _mock_summarizer()
+        mock_get.return_value = s
+
+        prompt_file = tmp_path / "my-prompt.md"
+        prompt_file.write_text("Custom prompt content")
+
+        f = tmp_path / "transcript.txt"
+        f.write_text("text")
+        out = tmp_path / "out.txt"
+
+        result = runner.invoke(
+            app,
+            ["summarize", str(f), "--prompt", str(prompt_file), "-o", str(out), "-q"],
+        )
+        assert result.exit_code == 0
+        s.summarize.assert_called_once_with(
+            "text", system_prompt="Custom prompt content"
+        )
+
+    @patch("sumr.cli.get_summarizer")
+    def test_unknown_prompt_exits_1(self, mock_get, monkeypatch, tmp_path):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        mock_get.return_value = _mock_summarizer()
+
+        f = tmp_path / "transcript.txt"
+        f.write_text("text")
+
+        result = runner.invoke(
+            app,
+            ["summarize", str(f), "--prompt", "nonexistent_prompt_xyz", "-q"],
+        )
+        assert result.exit_code == 1
 
     @patch("sumr.cli.get_summarizer")
     def test_stdin_input(self, mock_get, monkeypatch, tmp_path):
@@ -227,7 +289,7 @@ class TestDefaultCommand:
         audio = tmp_path / "test.mp3"
         audio.touch()
 
-        result = runner.invoke(app, [str(audio), "-p", "bad", "-q"])
+        result = runner.invoke(app, [str(audio), "-P", "bad", "-q"])
         assert result.exit_code == 1
         assert "Unknown provider" in result.output
 
