@@ -2,11 +2,35 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from sumr.providers.base import SummarizationResult, TranscriptionResult
+from sumr.providers.base import SummarizationResult, TranscriberLimits, TranscriptionResult
+
+DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
+
+_DEFAULT_LIMITS = TranscriberLimits(max_upload_bytes=25 * 1024 * 1024)
+
+# Models that have an output-token ceiling causing mid-sentence truncation.
+# 480 s (8 min) keeps each chunk safely under the ~2 048-token output limit.
+_MODEL_LIMITS: dict[str, TranscriberLimits] = {
+    "gpt-4o-transcribe": TranscriberLimits(
+        max_upload_bytes=25 * 1024 * 1024,
+        max_chunk_duration_secs=480,
+    ),
+    "gpt-4o-mini-transcribe": TranscriberLimits(
+        max_upload_bytes=25 * 1024 * 1024,
+        max_chunk_duration_secs=480,
+    ),
+    "whisper-1": TranscriberLimits(max_upload_bytes=25 * 1024 * 1024),
+}
+
+
+def get_limits(model: str | None) -> TranscriberLimits:
+    """Return the TranscriberLimits for the given OpenAI model (or the default)."""
+    effective = model if model is not None else DEFAULT_TRANSCRIPTION_MODEL
+    return _MODEL_LIMITS.get(effective, _DEFAULT_LIMITS)
 
 
 class OpenAITranscriber:
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini-transcribe") -> None:
+    def __init__(self, api_key: str, model: str = DEFAULT_TRANSCRIPTION_MODEL) -> None:
         self._client = OpenAI(api_key=api_key)
         self._model = model
 

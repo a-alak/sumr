@@ -4,8 +4,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from openai import APIConnectionError
 
-from sumr.providers.base import Summarizer, Transcriber
-from sumr.providers.openai import OpenAISummarizer, OpenAITranscriber
+from sumr.providers.base import Summarizer, Transcriber, TranscriberLimits
+from sumr.providers.openai import (
+    DEFAULT_TRANSCRIPTION_MODEL,
+    OpenAISummarizer,
+    OpenAITranscriber,
+    get_limits,
+)
 
 
 class TestOpenAITranscriber:
@@ -148,3 +153,30 @@ class TestOpenAISummarizer:
         s = OpenAISummarizer(api_key="sk-test")
         with pytest.raises(APIConnectionError):
             s.summarize("text")
+
+
+class TestGetLimits:
+    def test_default_model_has_duration_limit(self):
+        limits = get_limits(None)
+        assert isinstance(limits, TranscriberLimits)
+        assert limits.max_chunk_duration_secs is not None
+
+    def test_gpt4o_mini_transcribe_has_duration_limit(self):
+        limits = get_limits("gpt-4o-mini-transcribe")
+        assert limits.max_chunk_duration_secs == 480
+
+    def test_gpt4o_transcribe_has_duration_limit(self):
+        limits = get_limits("gpt-4o-transcribe")
+        assert limits.max_chunk_duration_secs == 480
+
+    def test_whisper1_has_no_duration_limit(self):
+        limits = get_limits("whisper-1")
+        assert limits.max_chunk_duration_secs is None
+
+    def test_unknown_model_falls_back_to_default_limits(self):
+        limits = get_limits("some-future-model")
+        assert isinstance(limits, TranscriberLimits)
+        assert limits.max_upload_bytes == 25 * 1024 * 1024
+
+    def test_none_resolves_to_default_transcription_model(self):
+        assert get_limits(None) == get_limits(DEFAULT_TRANSCRIPTION_MODEL)

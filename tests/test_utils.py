@@ -132,7 +132,7 @@ class TestChunkAudioFile:
     @patch("sumr.utils._extract_chunks")
     @patch("sumr.utils._find_split_points", return_value=[30.0])
     @patch("sumr.utils._detect_silence_midpoints", return_value=[10.0, 30.0, 55.0])
-    @patch("sumr.utils._get_audio_duration", return_value=60.0)
+    @patch("sumr.utils.get_audio_duration", return_value=60.0)
     def test_derives_max_duration_from_bitrate(
         self, mock_dur, mock_silence, mock_split, mock_extract, tmp_path
     ):
