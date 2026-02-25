@@ -1,26 +1,28 @@
+import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from openai import APIConnectionError
 
-from sumr.providers.base import Summarizer, Transcriber, TranscriberLimits
+from sumr.providers.base import Summarizer, Transcriber
 from sumr.providers.openai import (
     DEFAULT_TRANSCRIPTION_MODEL,
     OpenAISummarizer,
     OpenAITranscriber,
-    get_limits,
 )
 
 
 class TestOpenAITranscriber:
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_satisfies_protocol(self, mock_openai_cls):
+    def test_satisfies_protocol(self, mock_openai_cls, mock_async_cls):
         t = OpenAITranscriber(api_key="sk-test")
         assert isinstance(t, Transcriber)
 
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_transcribe_success(self, mock_openai_cls, tmp_path):
+    def test_transcribe_success(self, mock_openai_cls, mock_async_cls, tmp_path):
         mock_client = mock_openai_cls.return_value
         mock_client.audio.transcriptions.create.return_value = "hello world"
 
@@ -36,8 +38,11 @@ class TestOpenAITranscriber:
         assert call_kwargs.kwargs["model"] == "gpt-4o-mini-transcribe"
         assert call_kwargs.kwargs["file"] == audio
 
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_transcribe_passes_language_and_prompt(self, mock_openai_cls, tmp_path):
+    def test_transcribe_passes_language_and_prompt(
+        self, mock_openai_cls, mock_async_cls, tmp_path
+    ):
         mock_client = mock_openai_cls.return_value
         mock_client.audio.transcriptions.create.return_value = "transcribed"
 
@@ -50,14 +55,16 @@ class TestOpenAITranscriber:
         assert call_kwargs["language"] == "en"
         assert call_kwargs["prompt"] == "Meeting notes"
 
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_transcribe_file_not_found(self, mock_openai_cls):
+    def test_transcribe_file_not_found(self, mock_openai_cls, mock_async_cls):
         t = OpenAITranscriber(api_key="sk-test")
         with pytest.raises(FileNotFoundError):
             t.transcribe(Path("/nonexistent/audio.mp3"))
 
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_transcribe_custom_model(self, mock_openai_cls, tmp_path):
+    def test_transcribe_custom_model(self, mock_openai_cls, mock_async_cls, tmp_path):
         mock_client = mock_openai_cls.return_value
         mock_client.audio.transcriptions.create.return_value = "text"
 
@@ -68,8 +75,9 @@ class TestOpenAITranscriber:
         result = t.transcribe(audio)
         assert result.model == "whisper-1"
 
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_transcribe_api_error(self, mock_openai_cls, tmp_path):
+    def test_transcribe_api_error(self, mock_openai_cls, mock_async_cls, tmp_path):
         mock_client = mock_openai_cls.return_value
         mock_client.audio.transcriptions.create.side_effect = APIConnectionError(
             request=MagicMock()
@@ -81,6 +89,65 @@ class TestOpenAITranscriber:
 
         with pytest.raises(APIConnectionError):
             t.transcribe(audio)
+
+
+class TestOpenAITranscriberAsync:
+    @patch("sumr.providers.openai.AsyncOpenAI")
+    @patch("sumr.providers.openai.OpenAI")
+    def test_atranscribe_success(self, mock_openai_cls, mock_async_cls, tmp_path):
+        mock_async_client = mock_async_cls.return_value
+        mock_async_client.audio.transcriptions.create = AsyncMock(
+            return_value="hello async"
+        )
+
+        t = OpenAITranscriber(api_key="sk-test")
+        audio = tmp_path / "test.mp3"
+        audio.touch()
+
+        result = asyncio.run(t.atranscribe(audio))
+        assert result.text == "hello async"
+        assert result.model == DEFAULT_TRANSCRIPTION_MODEL
+
+    @patch("sumr.providers.openai.AsyncOpenAI")
+    @patch("sumr.providers.openai.OpenAI")
+    def test_atranscribe_passes_language_and_prompt(
+        self, mock_openai_cls, mock_async_cls, tmp_path
+    ):
+        mock_async_client = mock_async_cls.return_value
+        mock_async_client.audio.transcriptions.create = AsyncMock(
+            return_value="transcribed"
+        )
+
+        t = OpenAITranscriber(api_key="sk-test")
+        audio = tmp_path / "test.mp3"
+        audio.touch()
+
+        asyncio.run(t.atranscribe(audio, language="fr", prompt="notes"))
+        call_kwargs = mock_async_client.audio.transcriptions.create.call_args.kwargs
+        assert call_kwargs["language"] == "fr"
+        assert call_kwargs["prompt"] == "notes"
+
+    @patch("sumr.providers.openai.AsyncOpenAI")
+    @patch("sumr.providers.openai.OpenAI")
+    def test_atranscribe_file_not_found(self, mock_openai_cls, mock_async_cls):
+        t = OpenAITranscriber(api_key="sk-test")
+        with pytest.raises(FileNotFoundError):
+            asyncio.run(t.atranscribe(Path("/nonexistent/audio.mp3")))
+
+    @patch("sumr.providers.openai.AsyncOpenAI")
+    @patch("sumr.providers.openai.OpenAI")
+    def test_atranscribe_api_error(self, mock_openai_cls, mock_async_cls, tmp_path):
+        mock_async_client = mock_async_cls.return_value
+        mock_async_client.audio.transcriptions.create = AsyncMock(
+            side_effect=APIConnectionError(request=MagicMock())
+        )
+
+        t = OpenAITranscriber(api_key="sk-test")
+        audio = tmp_path / "test.mp3"
+        audio.touch()
+
+        with pytest.raises(APIConnectionError):
+            asyncio.run(t.atranscribe(audio))
 
 
 class TestOpenAISummarizer:
@@ -153,30 +220,3 @@ class TestOpenAISummarizer:
         s = OpenAISummarizer(api_key="sk-test")
         with pytest.raises(APIConnectionError):
             s.summarize("text")
-
-
-class TestGetLimits:
-    def test_default_model_has_duration_limit(self):
-        limits = get_limits(None)
-        assert isinstance(limits, TranscriberLimits)
-        assert limits.max_chunk_duration_secs is not None
-
-    def test_gpt4o_mini_transcribe_has_duration_limit(self):
-        limits = get_limits("gpt-4o-mini-transcribe")
-        assert limits.max_chunk_duration_secs == 480
-
-    def test_gpt4o_transcribe_has_duration_limit(self):
-        limits = get_limits("gpt-4o-transcribe")
-        assert limits.max_chunk_duration_secs == 480
-
-    def test_whisper1_has_no_duration_limit(self):
-        limits = get_limits("whisper-1")
-        assert limits.max_chunk_duration_secs is None
-
-    def test_unknown_model_falls_back_to_default_limits(self):
-        limits = get_limits("some-future-model")
-        assert isinstance(limits, TranscriberLimits)
-        assert limits.max_upload_bytes == 25 * 1024 * 1024
-
-    def test_none_resolves_to_default_transcription_model(self):
-        assert get_limits(None) == get_limits(DEFAULT_TRANSCRIPTION_MODEL)

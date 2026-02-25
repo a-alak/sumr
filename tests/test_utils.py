@@ -133,12 +133,11 @@ class TestChunkAudioFile:
     @patch("sumr.utils._find_split_points", return_value=[30.0])
     @patch("sumr.utils._detect_silence_midpoints", return_value=[10.0, 30.0, 55.0])
     @patch("sumr.utils.get_audio_duration", return_value=60.0)
-    def test_derives_max_duration_from_bitrate(
+    def test_passes_target_duration_to_split_points(
         self, mock_dur, mock_silence, mock_split, mock_extract, tmp_path
     ):
-        src = tmp_path / "compressed.mp3"
-        src.write_bytes(b"\x00" * 4000)  # 4000 bytes / 60s ≈ 66 bytes/sec
-        chunk_audio_file(src, 1000, tmp_path)
+        src = tmp_path / "audio.mp3"
+        src.touch()
+        chunk_audio_file(src, 45.0, tmp_path)
         args = mock_split.call_args.args
-        expected = (1000 / (4000 / 60)) * 0.95
-        assert abs(args[1] - expected) < 0.01
+        assert args[1] == 45.0

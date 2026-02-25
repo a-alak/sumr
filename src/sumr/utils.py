@@ -112,19 +112,17 @@ def get_audio_duration(path: Path) -> float:
     return float(result.stdout.strip())
 
 
-def chunk_audio_file(src: Path, max_chunk_bytes: int, output_dir: Path) -> list[Path]:
-    """Split audio at silence boundaries, keeping each chunk under max_chunk_bytes.
+def chunk_audio_file(
+    src: Path, target_duration_secs: float, output_dir: Path
+) -> list[Path]:
+    """Split audio at silence boundaries targeting target_duration_secs per chunk.
 
-    The max chunk duration is derived from the file's actual bitrate so chunks
-    are as large as possible. Falls back to a hard time cut if a segment has
-    no detectable silence. Input should already be a compressed MP3.
+    Uses -c copy (no re-encode). Falls back to a hard time cut if a segment
+    has no detectable silence.
     """
     duration = get_audio_duration(src)
-    bytes_per_sec = src.stat().st_size / duration
-    max_chunk_duration = (max_chunk_bytes / bytes_per_sec) * 0.95  # 5% headroom
-
     silence_midpoints = _detect_silence_midpoints(src)
-    split_points = _find_split_points(silence_midpoints, max_chunk_duration, duration)
+    split_points = _find_split_points(silence_midpoints, target_duration_secs, duration)
     return _extract_chunks(src, split_points, output_dir)
 
 
@@ -202,7 +200,7 @@ def _extract_chunks(
     chunks: list[Path] = []
 
     for i, (start, end) in enumerate(zip(starts, ends, strict=False)):
-        out = output_dir / f"chunk_{i:03d}.mp3"
+        out = output_dir / f"chunk_{i:03d}{src.suffix}"
         cmd = ["ffmpeg", "-y", "-ss", str(start), "-i", str(src)]
         if end is not None:
             cmd += ["-t", str(end - start)]

@@ -1,9 +1,8 @@
 from collections.abc import Callable
 
-from sumr.providers.base import Summarizer, Transcriber, TranscriberLimits
+from sumr.providers.base import Summarizer, Transcriber
 from sumr.providers.chunking import ChunkingTranscriber
 from sumr.providers.openai import OpenAISummarizer, OpenAITranscriber
-from sumr.providers.openai import get_limits as _openai_get_limits
 
 TRANSCRIBERS: dict[str, Callable[..., Transcriber]] = {
     "openai": OpenAITranscriber,
@@ -11,12 +10,6 @@ TRANSCRIBERS: dict[str, Callable[..., Transcriber]] = {
 
 SUMMARIZERS: dict[str, Callable[..., Summarizer]] = {
     "openai": OpenAISummarizer,
-}
-
-# Each entry maps a provider name to a callable that returns TranscriberLimits
-# for a given model name (None = provider default).
-LIMIT_GETTERS: dict[str, Callable[[str | None], TranscriberLimits]] = {
-    "openai": _openai_get_limits,
 }
 
 
@@ -31,8 +24,7 @@ def get_transcriber(
     if model is not None:
         kwargs["model"] = model
     inner = TRANSCRIBERS[provider](**kwargs)
-    limits = LIMIT_GETTERS[provider](model)
-    return ChunkingTranscriber(inner, limits)
+    return ChunkingTranscriber(inner)
 
 
 def get_summarizer(provider: str, api_key: str, model: str | None = None) -> Summarizer:

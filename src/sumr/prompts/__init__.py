@@ -27,7 +27,7 @@ def _load_bundled(name: str) -> str | None:
     try:
         f = importlib.resources.files("sumr.prompts") / f"{name}.md"
         return f.read_text(encoding="utf-8")
-    except (FileNotFoundError, TypeError):
+    except FileNotFoundError, TypeError:
         return None
 
 

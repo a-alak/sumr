@@ -2,13 +2,14 @@ from unittest.mock import patch
 
 import pytest
 
-from sumr.providers import LIMIT_GETTERS, get_summarizer, get_transcriber
+from sumr.providers import get_summarizer, get_transcriber
 from sumr.providers.base import Summarizer, Transcriber
 
 
 class TestGetTranscriber:
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_valid_provider(self, mock_openai_cls):
+    def test_valid_provider(self, mock_openai_cls, mock_async_cls):
         t = get_transcriber("openai", api_key="sk-test")
         assert isinstance(t, Transcriber)
 
@@ -16,20 +17,11 @@ class TestGetTranscriber:
         with pytest.raises(ValueError, match="Unknown provider"):
             get_transcriber("unknown", api_key="sk-test")
 
+    @patch("sumr.providers.openai.AsyncOpenAI")
     @patch("sumr.providers.openai.OpenAI")
-    def test_model_passthrough(self, mock_openai_cls):
+    def test_model_passthrough(self, mock_openai_cls, mock_async_cls):
         t = get_transcriber("openai", api_key="sk-test", model="whisper-1")
         assert t._inner._model == "whisper-1"
-
-    @patch("sumr.providers.openai.OpenAI")
-    def test_limits_applied_from_limit_getter(self, mock_openai_cls):
-        t = get_transcriber("openai", api_key="sk-test", model="gpt-4o-mini-transcribe")
-        assert t._limits == LIMIT_GETTERS["openai"]("gpt-4o-mini-transcribe")
-
-    @patch("sumr.providers.openai.OpenAI")
-    def test_whisper1_has_no_duration_limit(self, mock_openai_cls):
-        t = get_transcriber("openai", api_key="sk-test", model="whisper-1")
-        assert t._limits.max_chunk_duration_secs is None
 
 
 class TestGetSummarizer:
